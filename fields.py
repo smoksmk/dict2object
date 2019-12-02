@@ -19,6 +19,10 @@ class String(Field):
     field_type = str
 
 
+class Bool(Field):
+    field_type = str
+
+
 class Integer(Field):
     field_type = int
 
