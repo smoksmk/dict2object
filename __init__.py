@@ -1,21 +1,57 @@
-from .fields import Field
+import inspect
+import typing as T
 
 
-class Schema:
-    def __init__(self, proxy_class=None):
+def list_factory(data_object_class: 'DataObject'):
+
+    def factory(data: list, **kwargs):
+        return [data_object_class(data=item, **kwargs)for item in data]
+
+    return factory
+
+
+def proxy_factory(data_object_class):
+    return data_object_class
+
+
+class DataObject:
+    _fields: dict
+
+    def __init__(self):
+
+        fields = {}
+        type_hints = T.get_type_hints(self, allow_forward=True)
+
+        for name, hint in type_hints.items():
+            if inspect.isclass(hint) and issubclass(hint, DataObject):
+                fields[name] = FACTORIES[DataObject](hint)
+            elif issubclass(type(hint), T._GenericAlias):
+                fields[name] = FACTORIES[T.get_origin(hint)](T.get_args(hint)[0])
+            else:
+                pass
+
+        self._fields = fields
+
+    def load(self, data):
+        self._data = data
+
+        for name, value in data.items():
+            if name in self._fields:
+                value = self._fields[name]().load(value)
+
+            setattr(self, name, value)
+
+    @property
+    def _existing(self):
+        return 'id' in self._data
+
+
+class Nested:
+    def __init__(self, data_object, is_list=False):
         pass
 
-    def _prepare_data(self, data):
-        for key, value in data.items():
-            attr = getattr(self, key, None)
-            if hasattr(self, key):
-                if isinstance(attr, Field):
-                    setattr(self, key, attr(value))
 
-    def load(self, data) -> (dict, list):
-        self._prepare_data(data)
-        return self
-
-    def __repr__(self):
-        attr = ', '.join(self.__dict__)
-        return f'{self.__class__.__name__} has attr: ({attr})'
+FACTORIES = {
+    list: list_factory,
+    DataObject: proxy_factory,
+}
