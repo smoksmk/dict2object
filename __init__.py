@@ -3,7 +3,6 @@ import typing as T
 
 
 def list_factory(data_object_class: 'DataObject'):
-
     def factory(data: list, **kwargs):
         return [data_object_class(data=item, **kwargs)for item in data]
 
@@ -17,10 +16,18 @@ def proxy_factory(data_object_class):
 class DataObject:
     _fields: dict
 
-    def __init__(self):
+    def __init__(self, data: dict):
+        self._data = data
+        for name, value in data.items():
 
+            if name in self._fields:
+                value = self._fields[name](value)
+                setattr(self, name, value)
+
+    @classmethod
+    def _resolve_type_hints(cls):
         fields = {}
-        type_hints = T.get_type_hints(self, allow_forward=True)
+        type_hints = T.get_type_hints(cls)
 
         for name, hint in type_hints.items():
             if inspect.isclass(hint) and issubclass(hint, DataObject):
@@ -30,25 +37,23 @@ class DataObject:
             else:
                 pass
 
-        self._fields = fields
+        cls._fields = fields
 
-    def load(self, data):
-        self._data = data
+    def __dictify(self, name, value):
 
-        for name, value in data.items():
-            if name in self._fields:
-                value = self._fields[name]().load(value)
+        if isinstance(value, DataObject):
+            return {name: value.get_dict()}
+        elif isinstance(value, list):
+            return {name: [self.__dictify(name, i) for i in value]}
+        else:
+            return {name: value}
 
-            setattr(self, name, value)
-
-    @property
-    def _existing(self):
-        return 'id' in self._data
-
-
-class Nested:
-    def __init__(self, data_object, is_list=False):
-        pass
+    def get_dict(self):
+        fields = {}
+        for name, value in self.__dict__.items():
+            if not name.startswith('_') and not name.startswith('get'):
+                fields.update(self.__dictify(name, value))
+        return fields
 
 
 FACTORIES = {
